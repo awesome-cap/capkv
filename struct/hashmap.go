@@ -1,18 +1,10 @@
 package _struct
 
-import (
-	"sync"
-)
-
-type (
-	key string
-	value interface{}
-)
+import "sync"
 
 type HashMap struct {
 	nodes []*Node
-	overload float32
-	loadFactory int
+	loadFactor float32
 	size int
 	capacity int
 }
@@ -25,8 +17,8 @@ type Node struct {
 }
 
 type Entry struct {
-	K key
-	V value
+	K string
+	V interface{}
 	hash int
 	next *Entry
 }
@@ -35,13 +27,12 @@ func NewHashMap() *HashMap{
 	defaultCapacity := 16
 	return &HashMap{
 		nodes: make([]*Node, defaultCapacity),
-		overload: 0.75,
-		loadFactory: 60,
+		loadFactor: 0.75,
 		capacity: defaultCapacity,
 	}
 }
 
-func (m *HashMap) hash(k key) int {
+func (m *HashMap) hash(k string) int {
 	hash := uint32(2166136261)
 	const prime32 = uint32(16777619)
 	keyLength := len(k)
@@ -56,11 +47,10 @@ func (m *HashMap) index(hash int) int{
 	return hash & (m.capacity - 1)
 }
 
-func (m *HashMap) Set(k key, v value) value {
-	if m.size > int(float32(len(m.nodes) * m.loadFactory) * m.overload){
+func (m *HashMap) Set(k string, v interface{}) interface{} {
+	if m.size > int(float32(len(m.nodes)) * m.loadFactor * 3){
 		m.resize()
 	}
-
 	h := m.hash(k)
 	i := m.index(h)
 	n := m.nodes[i]
@@ -123,7 +113,7 @@ func (m *HashMap) resize() {
 	m.nodes = nodes
 }
 
-func (m *HashMap) Get(k key) (value, bool) {
+func (m *HashMap) Get(k string) (interface{}, bool) {
 	i := m.index(m.hash(k))
 	n := m.nodes[i]
 	if n != nil {
@@ -138,7 +128,7 @@ func (m *HashMap) Get(k key) (value, bool) {
 	return nil, false
 }
 
-func (m *HashMap) Del(k key) bool {
+func (m *HashMap) Del(k string) bool {
 	i := m.index(m.hash(k))
 	n := m.nodes[i]
 	if n != nil && n.header != nil {
