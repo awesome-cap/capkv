@@ -21,15 +21,24 @@ type Entry struct {
 	V interface{}
 	hash int
 	next *Entry
+	prev *Entry
 }
 
 func NewHashMap() *HashMap{
 	defaultCapacity := 16
 	return &HashMap{
-		nodes: make([]*Node, defaultCapacity),
+		nodes: initNodes(defaultCapacity),
 		loadFactor: 0.75,
 		capacity: defaultCapacity,
 	}
+}
+
+func initNodes(capacity int) (nodes []*Node){
+	nodes = make([]*Node, capacity)
+	for i := 0; i < capacity; i ++{
+		nodes[i] = &Node{}
+	}
+	return
 }
 
 func (m *HashMap) hash(k string) int {
@@ -52,106 +61,113 @@ func (m *HashMap) Set(k string, v interface{}) interface{} {
 		m.resize()
 	}
 	h := m.hash(k)
-	i := m.index(h)
-	n := m.nodes[i]
-	e := &Entry{K: k, V: v, hash: h}
-	if n == nil {
-		m.nodes[i] = &Node{header: e, tail: e}
-		m.size ++
-		m.nodes[i].size ++
-		return v
-	}
+	m.setNodeEntry(m.nodes[m.index(h)], &Entry{K: k, V: v, hash: h})
+	return v
+}
+
+func (m *HashMap) setNodeEntry(n *Node, e *Entry){
 	if n.header == nil {
 		n.header = e
 		n.tail = e
-		m.size ++
-		n.size ++
-		return v
-	}
-	next := n.header
-	if next.K == k{
-		next.V = v
-		return v
-	}
-	for next.next != nil {
-		next = next.next
-		if next.K == k{
-			next.V = v
-			return v
+	}else if e.hash <= n.header.hash {
+		e.next = n.header
+		n.header.prev = e
+		n.header = e
+	}else if e.hash >= n.tail.hash{
+		n.tail.next = e
+		e.prev = n.tail
+		n.tail = e
+	}else{
+		next := n.header
+		for next != nil && next.hash < e.hash{
+			if next.K == e.K{
+				next.V = e.V
+				return
+			}
+			next = next.next
+		}
+		if next != nil && next.prev != nil {
+			next.prev.next = e
+			e.prev = next.prev
+			e.next = next
+			next.prev = e
 		}
 	}
-	next.next = e
-	n.tail = e
-	m.size ++
 	n.size ++
-	return v
+	m.size ++
 }
 
 func (m *HashMap) resize() {
 	m.capacity = m.capacity * 2
-	nodes := make([]*Node, m.capacity)
+	nodes := initNodes(m.capacity)
 	for _, old := range m.nodes {
-		if old != nil {
-			next := old.header
-			for next != nil {
-				i := m.index(next.hash)
-				n := nodes[i]
-				if n == nil {
-					nodes[i] = &Node{header: next, tail: next}
-					nodes[i].size ++
-				}else{
-					n.tail.next = next
-					n.tail = next
-					n.size ++
-				}
-				temp := next.next
-				next.next = nil
-				next = temp
-			}
+		next := old.header
+		for next != nil {
+			m.setNodeEntry(nodes[m.index(next.hash)], next.clone())
+			next = next.next
 		}
 	}
 	m.nodes = nodes
 }
 
-func (m *HashMap) Get(k string) (interface{}, bool) {
-	i := m.index(m.hash(k))
-	n := m.nodes[i]
+func (m *HashMap) getNodeEntry(n *Node, k string) *Entry {
 	if n != nil {
-		next := n.header
-		for next != nil {
-			if next.K == k {
-				return next.V, true
+		h := n.header
+		t := n.tail
+		for h != nil && t != nil && t.hash >= h.hash {
+			if h.K == k {
+				return h
 			}
-			next = next.next
+			if t.K == k {
+				return t
+			}
+			h = h.next
+			t = t.prev
+		}
+	}
+	return nil
+}
+
+func (m *HashMap) Get(k string) (interface{}, bool) {
+	n := m.nodes[m.index(m.hash(k))]
+	if n != nil {
+		e := m.getNodeEntry(n, k)
+		if e != nil {
+			return e.V, true
 		}
 	}
 	return nil, false
 }
 
 func (m *HashMap) Del(k string) bool {
-	i := m.index(m.hash(k))
-	n := m.nodes[i]
-	if n != nil && n.header != nil {
-		if n.header.K == k {
-			n.header = nil
-			n.tail = nil
+	n := m.nodes[m.index(m.hash(k))]
+	if n != nil{
+		e := m.getNodeEntry(n, k)
+		if e != nil {
+			if e.prev == nil && e.next == nil{
+				n.header = nil
+				n.tail = nil
+			}else if e.prev == nil {
+				n.header = e.next
+				e.next.prev = nil
+			}else if e.next == nil {
+				n.tail = e.prev
+				e.prev.next = nil
+			}else{
+				e.prev.next = e.next
+				e.next.prev = e.prev
+			}
 			m.size --
 			n.size --
-			return true
-		}
-		prev := n.header
-		next := prev.next
-		for next != nil {
-			if next.K == k {
-				prev.next = nil
-				n.tail = prev
-				m.size --
-				n.size --
-				return true
-			}
-			prev = next
-			next = prev.next
 		}
 	}
 	return false
+}
+
+func (e *Entry) clone() *Entry{
+	return &Entry{
+		K: e.K,
+		V: e.V,
+		hash: e.hash,
+	}
 }
