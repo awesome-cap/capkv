@@ -1,16 +1,21 @@
 package _struct
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 type HashMap struct {
+	sync.RWMutex
+
 	nodes []*Node
-	loadFactor float32
-	size int
+	loadFactor float64
 	capacity int
+	size int64
 }
 
 type Node struct {
-	sync.RWMutex
+	sync.Mutex
 	header *Entry
 	tail *Entry
 	size int
@@ -41,7 +46,7 @@ func initNodes(capacity int) (nodes []*Node){
 	return
 }
 
-func (m *HashMap) hash(k string) int {
+func hash(k string) int {
 	hash := uint32(2166136261)
 	const prime32 = uint32(16777619)
 	keyLength := len(k)
@@ -52,20 +57,24 @@ func (m *HashMap) hash(k string) int {
 	return int(hash)
 }
 
-func (m *HashMap) index(hash int) int{
-	return hash & (m.capacity - 1)
+func indexOf(hash int, capacity int) int{
+	return hash & (capacity - 1)
 }
 
 func (m *HashMap) Set(k string, v interface{}) interface{} {
-	if m.size > int(float32(len(m.nodes)) * m.loadFactor * 3){
-		m.resize()
+	m.resize()
+	h := hash(k)
+	n := m.nodes[indexOf(h, m.capacity)]
+	n.Lock()
+	defer n.Unlock()
+	if m.setNodeEntry(n, &Entry{K: k, V: v, hash: h}) {
+		n.size ++
+		atomic.AddInt64(&m.size, 1)
 	}
-	h := m.hash(k)
-	m.setNodeEntry(m.nodes[m.index(h)], &Entry{K: k, V: v, hash: h})
 	return v
 }
 
-func (m *HashMap) setNodeEntry(n *Node, e *Entry){
+func (m *HashMap) setNodeEntry(n *Node, e *Entry) bool{
 	if n.header == nil {
 		n.header = e
 		n.tail = e
@@ -82,7 +91,7 @@ func (m *HashMap) setNodeEntry(n *Node, e *Entry){
 		for next != nil && next.hash < e.hash{
 			if next.K == e.K{
 				next.V = e.V
-				return
+				return false
 			}
 			next = next.next
 		}
@@ -93,43 +102,59 @@ func (m *HashMap) setNodeEntry(n *Node, e *Entry){
 			next.prev = e
 		}
 	}
-	n.size ++
-	m.size ++
+	return true
+}
+
+func (m *HashMap) dilate() bool {
+	return m.size > int64(float64(len(m.nodes)) * m.loadFactor * 3)
 }
 
 func (m *HashMap) resize() {
-	m.capacity = m.capacity * 2
-	nodes := initNodes(m.capacity)
+	if m.dilate() {
+		m.Lock()
+		defer m.Unlock()
+		if m.dilate() {
+			m.doResize()
+		}
+	}
+}
+
+func (m *HashMap) doResize()  {
+	capacity := m.capacity * 2
+	nodes := initNodes(capacity)
+	size := int64(0)
 	for _, old := range m.nodes {
 		next := old.header
 		for next != nil {
-			m.setNodeEntry(nodes[m.index(next.hash)], next.clone())
+			newNode := nodes[indexOf(next.hash, capacity)]
+			if m.setNodeEntry(newNode, next.clone()) {
+				newNode.size ++
+				size ++
+			}
 			next = next.next
 		}
 	}
+	m.capacity = capacity
 	m.nodes = nodes
+	m.size = size
 }
 
 func (m *HashMap) getNodeEntry(n *Node, k string) *Entry {
 	if n != nil {
-		h := n.header
-		t := n.tail
-		for h != nil && t != nil && t.hash >= h.hash {
-			if h.K == k {
-				return h
+		next := n.header
+		h := hash(k)
+		for next != nil && next.hash <= h {
+			if next.K == k {
+				return next
 			}
-			if t.K == k {
-				return t
-			}
-			h = h.next
-			t = t.prev
+			next = next.next
 		}
 	}
 	return nil
 }
 
 func (m *HashMap) Get(k string) (interface{}, bool) {
-	n := m.nodes[m.index(m.hash(k))]
+	n := m.nodes[indexOf(hash(k), m.capacity)]
 	if n != nil {
 		e := m.getNodeEntry(n, k)
 		if e != nil {
@@ -140,26 +165,29 @@ func (m *HashMap) Get(k string) (interface{}, bool) {
 }
 
 func (m *HashMap) Del(k string) bool {
-	n := m.nodes[m.index(m.hash(k))]
-	if n != nil{
-		e := m.getNodeEntry(n, k)
-		if e != nil {
-			if e.prev == nil && e.next == nil{
-				n.header = nil
-				n.tail = nil
-			}else if e.prev == nil {
-				n.header = e.next
-				e.next.prev = nil
-			}else if e.next == nil {
-				n.tail = e.prev
-				e.prev.next = nil
-			}else{
-				e.prev.next = e.next
-				e.next.prev = e.prev
-			}
-			m.size --
-			n.size --
+	m.RLock()
+	defer m.RUnlock()
+
+	n := m.nodes[indexOf(hash(k), m.capacity)]
+	n.Lock()
+	defer n.Unlock()
+	e := m.getNodeEntry(n, k)
+	if e != nil {
+		if e.prev == nil && e.next == nil{
+			n.header = nil
+			n.tail = nil
+		}else if e.prev == nil {
+			n.header = e.next
+			e.next.prev = nil
+		}else if e.next == nil {
+			n.tail = e.prev
+			e.prev.next = nil
+		}else{
+			e.prev.next = e.next
+			e.next.prev = e.prev
 		}
+		n.size --
+		atomic.AddInt64(&m.size, -1)
 	}
 	return false
 }
