@@ -55,3 +55,8 @@ func (c *Conn) accept(apply func(args []string, c *Conn)) error{
 		}
 	}
 }
+
+func (c *Conn) Write(args []string) error{
+	_, err := c.conn.Write(protocol.Encode(args))
+	return err
+}
