@@ -1,4 +1,4 @@
-package protocol
+package net
 
 import (
 	"encoding/binary"
@@ -13,7 +13,7 @@ var (
 	LengthError = errors.New("Data length error. ")
 )
 
-func Encode(args []string) []byte{
+func encode(args []string) []byte{
 	lenBytes := make([]byte, lenByteSize)
 	dataBytes, _ := json.Marshal(args)
 	binary.BigEndian.PutUint32(lenBytes, uint32(len(dataBytes)))
@@ -24,16 +24,16 @@ func Encode(args []string) []byte{
 	return data
 }
 
-func Decode(data []byte) ([]string, int, error){
+func decode(data []byte) ([]string, int, error){
 	start := strings.Index(string(data), string(sign))
 	if start == -1 {
 		return nil, 0, LengthError
 	}
 	start += len(sign)
-	if len(data) < start + lenByteSize{
+	if len(data) < start +lenByteSize {
 		return nil, 0, LengthError
 	}
-	dataSize := int(binary.BigEndian.Uint32(data[start:start + lenByteSize]))
+	dataSize := int(binary.BigEndian.Uint32(data[start:start +lenByteSize]))
 	start += lenByteSize
 	if len(data) < start + dataSize {
 		return nil, 0, LengthError

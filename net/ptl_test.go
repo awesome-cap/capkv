@@ -1,12 +1,12 @@
-package protocol
+package net
 
 import "testing"
 
 func TestDecodeAndEncode(t *testing.T) {
 	args := []string{"set", "name", "nico"}
-	data := Encode(args)
+	data := encode(args)
 	t.Log(data)
-	args, _, err := Decode(data)
+	args, _, err := decode(data)
 	if err != nil{
 		t.Fatal(err)
 	}

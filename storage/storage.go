@@ -17,7 +17,10 @@ func New() *Engine {
 
 func (e *Engine) Get(key string) (string, bool){
 	v, ok := e.string.Get(key)
-	return v.(string), ok
+	if ok {
+		return v.(string), ok
+	}
+	return "", ok
 }
 
 func (e *Engine) Set(key, value string, ex time.Duration, nx bool) bool {

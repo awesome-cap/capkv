@@ -1,7 +1,6 @@
-package network
+package net
 
 import (
-	"github.com/awesome-cap/dkv/protocol"
 	"net"
 )
 
@@ -10,7 +9,7 @@ type Conn struct {
 	bytes []byte
 }
 
-func newConn(conn net.Conn) *Conn{
+func NewConn(conn net.Conn) *Conn{
 	return &Conn{
 		conn: conn,
 		bytes: make([]byte, 0),
@@ -30,7 +29,7 @@ func (c *Conn) read() error{
 func (c *Conn) parse() ([][]string, error) {
 	data := make([][]string, 0)
 	for {
-		msg, index, err := protocol.Decode(c.bytes)
+		msg, index, err := decode(c.bytes)
 		if err != nil{
 			break
 		}
@@ -40,7 +39,7 @@ func (c *Conn) parse() ([][]string, error) {
 	return data, nil
 }
 
-func (c *Conn) accept(apply func(args []string, c *Conn)) error{
+func (c *Conn) Accept(apply func(args []string, c *Conn)) error{
 	for {
 		err := c.read()
 		if err != nil {
@@ -57,6 +56,6 @@ func (c *Conn) accept(apply func(args []string, c *Conn)) error{
 }
 
 func (c *Conn) Write(args []string) error{
-	_, err := c.conn.Write(protocol.Encode(args))
+	_, err := c.conn.Write(encode(args))
 	return err
 }
