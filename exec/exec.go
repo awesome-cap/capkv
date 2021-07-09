@@ -3,7 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"github.com/awesome-cap/dkv/storage"
+	"github.com/awesome-cap/hashmap"
 	"strings"
 )
 
@@ -14,18 +14,20 @@ var (
 )
 
 type Executor struct {
-	engine *storage.Engine
+	engine *Engine
 	handlers map[string]Handler
 }
 
 type Handler interface {
-	handle(e *storage.Engine, args []string) ([]string, error)
+	handle(e *Engine, args []string) ([]string, error)
 	size() int
 }
 
-func NewExec(engine *storage.Engine) *Executor {
+func New() *Executor {
 	return &Executor{
-		engine: engine,
+		engine: &Engine{
+			string: hashmap.New(),
+		},
 		handlers: map[string]Handler{},
 	}
 }
@@ -60,7 +62,7 @@ func (e *Executor) RegistryHandler(cmd string, h Handler) {
 
 type getHandler struct {}
 
-func (h getHandler) handle(e *storage.Engine, args []string) ([]string, error){
+func (h getHandler) handle(e *Engine, args []string) ([]string, error){
 	if v, ok := e.Get(args[1]); ok {
 		return []string{v}, nil
 	}
@@ -71,7 +73,7 @@ func (h getHandler) size() int {return 2}
 
 type setHandler struct {}
 
-func (h setHandler) handle(e *storage.Engine, args []string) ([]string, error){
+func (h setHandler) handle(e *Engine, args []string) ([]string, error){
 	nx := false
 	for i := 3; i < len(args); i ++{
 		if strings.ToUpper(args[i]) == "NX" {
@@ -88,7 +90,7 @@ func (h setHandler) size() int {return 3}
 
 type delHandler struct {}
 
-func (h delHandler) handle(e *storage.Engine, args []string) ([]string, error){
+func (h delHandler) handle(e *Engine, args []string) ([]string, error){
 	if e.Del(args[1]) {
 		return []string{"1"}, nil
 	}

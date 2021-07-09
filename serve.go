@@ -3,12 +3,11 @@ package main
 import (
     "github.com/awesome-cap/dkv/exec"
     "github.com/awesome-cap/dkv/net"
-    "github.com/awesome-cap/dkv/storage"
     "log"
 )
 
 func main() {
-    e := exec.NewExec(storage.New())
+    e := exec.New()
     e.RegistryHandler("get", exec.GetHandler)
     e.RegistryHandler("set", exec.SetHandler)
     e.RegistryHandler("del", exec.DelHandler)
