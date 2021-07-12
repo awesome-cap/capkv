@@ -2,3 +2,7 @@ github.com/awesome-cap/hashmap v0.0.0-20210703052654-553ea3b03e5b h1:rdmN6sQH3+A
 github.com/awesome-cap/hashmap v0.0.0-20210703052654-553ea3b03e5b/go.mod h1:5vIRKw3P2HirHOPm1xQfJ6GmPfZQemzbIXfU0MqLlZU=
 github.com/awesome-cap/hashmap v0.0.0-20210703055113-3286bdf2a671 h1:C5McXLsRbHl21rGz3rCemxg+OHlf1KR59rtOODK4Muo=
 github.com/awesome-cap/hashmap v0.0.0-20210703055113-3286bdf2a671/go.mod h1:5vIRKw3P2HirHOPm1xQfJ6GmPfZQemzbIXfU0MqLlZU=
+github.com/awesome-cap/hashmap v0.0.0-20210712094241-84ef9dda81ac h1:OvIoEqI+Tlu0A5HX3MrOaTmFINGJNVQsBTGE/PQmbM4=
+github.com/awesome-cap/hashmap v0.0.0-20210712094241-84ef9dda81ac/go.mod h1:5vIRKw3P2HirHOPm1xQfJ6GmPfZQemzbIXfU0MqLlZU=
+github.com/awesome-cap/hashmap v0.0.0-20210712100241-adf156b8352a h1:I+lQLVE4SKMPS9B8tD+64PiFIOpTQ//OSum6nc98M0A=
+github.com/awesome-cap/hashmap v0.0.0-20210712100241-adf156b8352a/go.mod h1:5vIRKw3P2HirHOPm1xQfJ6GmPfZQemzbIXfU0MqLlZU=
