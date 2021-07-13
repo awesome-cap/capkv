@@ -54,17 +54,56 @@ func (d dbs) active() *db {
 
 type db struct {
 	seq   int64
+	dir   string
 	state state
 	seed  os.FileInfo
+
+	file *os.File
 }
 
 func (d *db) size() (int64, error) {
-	seed, err := os.Stat(d.seed.Name())
+	seed, err := os.Stat(d.dir + string(os.PathSeparator) + d.seed.Name())
 	if err != nil {
 		return 0, err
 	}
 	d.seed = seed
 	return seed.Size(), nil
+}
+
+func (d *db) open() error {
+	file, err := os.OpenFile(d.path(), os.O_RDWR|os.O_TRUNC|os.O_CREATE, os.FileMode(0766))
+	if err != nil {
+		return err
+	}
+	d.file = file
+	return nil
+}
+
+func (d *db) path() string {
+	return d.dir + string(os.PathSeparator) + d.seed.Name()
+}
+
+func (d *db) close() {
+	if d.file != nil {
+		_ = d.file.Close()
+	}
+}
+
+func (d *db) write(data []byte) error {
+	if d.file != nil {
+		_, err := d.file.Write(data)
+		return err
+	}
+	return nil
+}
+
+func (d *db) stabled() error {
+	err := os.Rename(d.path(), fmt.Sprintf("%s%c%s", d.dir, os.PathSeparator, fmt.Sprintf(dbFileNameFormatter, S, d.seq)))
+	if err != nil {
+		return err
+	}
+	d.state = S
+	return nil
 }
 
 type log struct {
@@ -101,13 +140,8 @@ func (s *Storage) initialize() error {
 		if info.IsDir() {
 			continue
 		}
-		seed, err := os.Stat(info.Name())
-		if err != nil {
-			return err
-		}
 		if strings.HasSuffix(info.Name(), dbFileType) {
-			arr := strings.Split(info.Name(), string(os.PathSeparator))
-			info := strings.Split(strings.SplitAfterN(arr[len(arr)-1], ".", 2)[0], "_")
+			info := strings.Split(strings.SplitN(info.Name(), ".", 2)[0], "_")
 			if len(info) != 2 {
 				return InvalidDBFileNameError
 			}
@@ -115,39 +149,59 @@ func (s *Storage) initialize() error {
 			if err != nil {
 				return err
 			}
-			s.dbs = append(s.dbs, &db{seq: seq, state: state(info[0]), seed: seed})
-		} else if s.log == nil && strings.HasSuffix(info.Name(), logFileType) {
-			file, err := os.OpenFile(seed.Name(), os.O_APPEND, os.FileMode(0766))
+			d, err := s.newDB(state(info[0]), seq)
 			if err != nil {
 				return err
 			}
-			s.log = &log{file: file}
+			s.dbs = append(s.dbs, d)
+		} else if s.log == nil && strings.HasSuffix(info.Name(), logFileType) {
+			logFile, err := s.newLog(info.Name())
+			if err != nil {
+				return err
+			}
+			s.log = logFile
 		}
 		sort.Sort(s.dbs)
-		if s.log == nil {
-			logFile, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, fmt.Sprintf(logFileNameFormatter, "r")))
-			if err != nil {
-				return err
-			}
-			s.log = &log{file: logFile}
+	}
+	if s.log == nil {
+		logFile, err := s.newLog(fmt.Sprintf(logFileNameFormatter, "redo"))
+		if err != nil {
+			return err
 		}
-		if s.dbs.Len() == 0 {
-			dbFile, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, fmt.Sprintf(dbFileNameFormatter, A, 1)))
-			if err != nil {
-				return err
-			}
-			seed, err := dbFile.Stat()
-			if err != nil {
-				return err
-			}
-			s.dbs = append(s.dbs, &db{seq: 1, seed: seed, state: A})
+		s.log = logFile
+	}
+	if s.dbs.Len() == 0 {
+		active, err := s.newDB(A, 1)
+		if err != nil {
+			return err
 		}
+		s.dbs = append(s.dbs, active)
 	}
 	return nil
 }
 
 func (s *Storage) active() *db {
-	return s.active()
+	return s.dbs.active()
+}
+
+func (s *Storage) newDB(st state, seq int64) (*db, error) {
+	dbFile, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, fmt.Sprintf(dbFileNameFormatter, st, seq)))
+	if err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+	seed, err := dbFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return &db{seq: seq, seed: seed, state: st, dir: s.dir}, nil
+}
+
+func (s *Storage) newLog(name string) (*log, error) {
+	file, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, name))
+	if err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+	return &log{file: file}, nil
 }
 
 func (s *Storage) startDaemon(e *Engine) {
@@ -206,11 +260,12 @@ func (s *Storage) loadDB(e *Engine) error {
 	if active == nil {
 		return ActiveDBNotExistError
 	}
-	file, err := os.OpenFile(active.seed.Name(), os.O_RDONLY, active.seed.Mode())
+	err := active.open()
 	if err != nil {
 		return err
 	}
-	return e.UnMarshal(file)
+	defer active.close()
+	return e.UnMarshal(active.file)
 }
 
 func (s *Storage) loadLog(e *Engine) error {
@@ -234,12 +289,12 @@ func (s *Storage) refresh(e *Engine) error {
 	if active == nil {
 		return ActiveDBNotExistError
 	}
-	file, err := os.OpenFile(active.seed.Name(), os.O_RDWR|os.O_TRUNC|os.O_CREATE, os.FileMode(0766))
+	err := active.open()
 	if err != nil {
 		return err
 	}
-	_, err = file.Write(e.Marshal())
-	return err
+	defer active.close()
+	return active.write(e.Marshal())
 }
 
 func (s *Storage) filing() error {
@@ -250,43 +305,34 @@ func (s *Storage) filing() error {
 	if active == nil {
 		return ActiveDBNotExistError
 	}
-	active.state = S
-	err := os.Rename(active.seed.Name(), fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, fmt.Sprintf(dbFileNameFormatter, S, active.seq)))
+	err := active.stabled()
 	if err != nil {
 		return err
 	}
-	dbFile, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, fmt.Sprintf(dbFileNameFormatter, A, active.seq+1)))
+	d, err := s.newDB(A, active.seq+1)
 	if err != nil {
 		return err
-	}
-	seed, err := dbFile.Stat()
-	if err != nil {
-		return err
-	}
-	d := &db{
-		seq:   active.seq + 1,
-		state: A,
-		seed:  seed,
 	}
 	s.dbs = append(s.dbs, d)
 	return nil
 }
 
 func (s *Storage) foreach(fn func(e *Engine) (interface{}, bool)) (interface{}, bool) {
-	for i := s.dbs.Len() - 1; i >= 0; i++ {
+	for i := s.dbs.Len() - 1; i >= 0; i-- {
 		d := s.dbs[i]
 		if d.state == S {
 			virtualEngine := &Engine{
 				string: hashmap.New(),
 			}
-			file, err := os.OpenFile(d.seed.Name(), os.O_RDONLY, d.seed.Mode())
+			err := d.open()
 			if err != nil {
 				xlog.Fatalln(err)
 			}
-			err = virtualEngine.UnMarshal(file)
+			err = virtualEngine.UnMarshal(d.file)
 			if err != nil {
 				xlog.Fatalln(err)
 			}
+			d.close()
 			v, ok := fn(virtualEngine)
 			if ok {
 				return v, true

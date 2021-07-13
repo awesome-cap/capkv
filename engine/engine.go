@@ -30,24 +30,14 @@ func New(conf config.Config) (*Engine, error) {
 		handlers: map[string]handler{},
 		string:   hashmap.New(),
 	}
-	err = s.loadDB(e)
-	if err != nil {
-		return nil, err
-	}
-	err = s.loadLog(e)
-	if err != nil {
-		return nil, err
-	}
-	s.startDaemon(e)
+	_ = s.loadDB(e)
+	_ = s.loadLog(e)
+	//s.startDaemon(e)
 	return e, nil
 }
 
 func (e *Engine) Registry(h handler) {
 	e.handlers[strings.ToLower(h.name())] = h
-}
-
-func (e *Engine) Enable() {
-
 }
 
 func (e *Engine) Exec(args []string) ([]string, error) {
@@ -64,9 +54,11 @@ func (e *Engine) Exec(args []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	e.lsn, err = e.storage.logging(args)
-	if err != nil {
-		return nil, err
+	if writeable[args[0]] {
+		e.lsn, err = e.storage.logging(args)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return handler.handle(e, args)
 }

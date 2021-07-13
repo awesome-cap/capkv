@@ -10,6 +10,10 @@ var (
 	Get = getHandler{}
 	Set = setHandler{}
 	Del = delHandler{}
+
+	writeable = map[string]bool{
+		"set": true, "del": true,
+	}
 )
 
 type handler interface {
