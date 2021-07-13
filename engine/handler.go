@@ -3,33 +3,19 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"github.com/awesome-cap/hashmap"
 	"strings"
 )
 
 var (
-	GetHandler = getHandler{}
-	SetHandler = setHandler{}
-	DelHandler = delHandler{}
+	Get = getHandler{}
+	Set = setHandler{}
+	Del = delHandler{}
 )
 
-type Executor struct {
-	engine   *Engine
-	handlers map[string]Handler
-}
-
-type Handler interface {
+type handler interface {
 	handle(e *Engine, args []string) ([]string, error)
 	size() int
-}
-
-func New() *Executor {
-	return &Executor{
-		engine: &Engine{
-			string: hashmap.New(),
-		},
-		handlers: map[string]Handler{},
-	}
+	name() string
 }
 
 func assertArgsSize(args []string, s int) error {
@@ -37,27 +23,6 @@ func assertArgsSize(args []string, s int) error {
 		return errors.New(fmt.Sprintf("Args size err, expect %d", s))
 	}
 	return nil
-}
-
-func (e *Executor) Exec(args []string) ([]string, error) {
-	err := assertArgsSize(args, 1)
-	if err != nil {
-		return nil, err
-	}
-	args[0] = strings.ToLower(args[0])
-	handler, ok := e.handlers[args[0]]
-	if !ok {
-		return nil, errors.New(fmt.Sprintf("Invalid cmd %s", args[0]))
-	}
-	err = assertArgsSize(args, handler.size())
-	if err != nil {
-		return nil, err
-	}
-	return handler.handle(e.engine, args)
-}
-
-func (e *Executor) RegistryHandler(cmd string, h Handler) {
-	e.handlers[strings.ToLower(cmd)] = h
 }
 
 type getHandler struct{}
@@ -69,7 +34,8 @@ func (h getHandler) handle(e *Engine, args []string) ([]string, error) {
 	return nil, errors.New(fmt.Sprintf("%s not exist. ", args[1]))
 }
 
-func (h getHandler) size() int { return 2 }
+func (h getHandler) size() int    { return 2 }
+func (h getHandler) name() string { return "get" }
 
 type setHandler struct{}
 
@@ -86,7 +52,8 @@ func (h setHandler) handle(e *Engine, args []string) ([]string, error) {
 	return []string{"0"}, nil
 }
 
-func (h setHandler) size() int { return 3 }
+func (h setHandler) size() int    { return 3 }
+func (h setHandler) name() string { return "set" }
 
 type delHandler struct{}
 
@@ -97,4 +64,5 @@ func (h delHandler) handle(e *Engine, args []string) ([]string, error) {
 	return []string{"0"}, nil
 }
 
-func (h delHandler) size() int { return 2 }
+func (h delHandler) size() int    { return 2 }
+func (h delHandler) name() string { return "del" }

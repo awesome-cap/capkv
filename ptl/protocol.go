@@ -1,7 +1,6 @@
 package ptl
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"io"
@@ -64,7 +63,7 @@ func ReadBytes(reader io.Reader, size int) ([]byte, error) {
 	return data, nil
 }
 
-func UnMarshal(reader *bufio.Reader) ([]string, error) {
+func UnMarshal(reader io.Reader) ([]string, error) {
 	count, err := ReadUint16(reader)
 	if err != nil {
 		return nil, err
@@ -117,7 +116,7 @@ func MarshalWrappedLSN(id uint64, args []string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func UnMarshalWrappedLSN(reader *bufio.Reader) (uint64, []string, error) {
+func UnMarshalWrappedLSN(reader io.Reader) (uint64, []string, error) {
 	lsn, err := ReadUint64(reader)
 	if err != nil {
 		return 0, nil, err
