@@ -2,7 +2,7 @@ package net
 
 import (
 	"bufio"
-	"github.com/awesome-cap/dkv/ptl"
+	"github.com/awesome-cap/capkv/ptl"
 	"net"
 )
 

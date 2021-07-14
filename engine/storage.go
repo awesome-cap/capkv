@@ -3,15 +3,17 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"github.com/awesome-cap/dkv/config"
-	"github.com/awesome-cap/dkv/ptl"
+	"github.com/awesome-cap/capkv/config"
+	"github.com/awesome-cap/capkv/ptl"
 	"github.com/awesome-cap/hashmap"
+	"io"
 	"io/ioutil"
 	xlog "log"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -29,7 +31,6 @@ const (
 )
 
 var (
-	DirNotSettingError     = errors.New("Dir not settings. ")
 	InvalidDBFileNameError = errors.New("Invalid db file name. ")
 	ActiveDBNotExistError  = errors.New("Active db not exist. ")
 )
@@ -53,11 +54,15 @@ func (d dbs) active() *db {
 }
 
 type db struct {
+	sync.Mutex
+
 	seq   int64
 	dir   string
 	state state
 	name  string
 
+	e    *Engine
+	t    time.Time
 	file *os.File
 }
 
@@ -70,6 +75,7 @@ func (d *db) size() (int64, error) {
 }
 
 func (d *db) open() error {
+	d.Lock()
 	file, err := os.OpenFile(d.path(), os.O_RDWR|os.O_TRUNC|os.O_CREATE, os.FileMode(0766))
 	if err != nil {
 		return err
@@ -83,8 +89,10 @@ func (d *db) path() string {
 }
 
 func (d *db) close() {
+	defer d.Unlock()
 	if d.file != nil {
 		_ = d.file.Close()
+		d.file = nil
 	}
 }
 
@@ -105,12 +113,35 @@ func (d *db) stabled() error {
 	return nil
 }
 
+func (d *db) engine() (*Engine, error) {
+	e := d.e
+	if e == nil {
+		err := d.open()
+		defer d.close()
+		if err != nil {
+			return nil, err
+		}
+		e = d.e
+		if e == nil {
+			e = &Engine{
+				string: hashmap.New(),
+			}
+			err = e.UnMarshal(d.file)
+			if err != nil {
+				return nil, err
+			}
+			d.e = e
+			d.t = time.Now()
+		}
+	}
+	return e, nil
+}
+
 type log struct {
 	file *os.File
 }
 
 type Storage struct {
-	dir string
 	lsn uint64
 	dbs dbs
 	log *log
@@ -119,10 +150,7 @@ type Storage struct {
 }
 
 func newStorage(conf config.Storage) (*Storage, error) {
-	if conf.Dir == "" {
-		return nil, DirNotSettingError
-	}
-	s := &Storage{dir: conf.Dir, conf: conf}
+	s := &Storage{conf: conf}
 	err := s.initialize()
 	if err != nil {
 		return nil, err
@@ -131,7 +159,14 @@ func newStorage(conf config.Storage) (*Storage, error) {
 }
 
 func (s *Storage) initialize() error {
-	files, err := ioutil.ReadDir(s.dir)
+	if s.conf.Dir == "" {
+		s.conf.Dir = "data"
+	}
+	err := os.MkdirAll(s.conf.Dir, os.FileMode(0766))
+	if err != nil {
+		return err
+	}
+	files, err := ioutil.ReadDir(s.conf.Dir)
 	if err != nil {
 		return err
 	}
@@ -204,16 +239,16 @@ func (s *Storage) createIfNotExist(path string) error {
 
 func (s *Storage) newDB(st state, seq int64) (*db, error) {
 	name := fmt.Sprintf(dbFileNameFormatter, st, seq)
-	path := fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, name)
+	path := fmt.Sprintf("%s%c%s", s.conf.Dir, os.PathSeparator, name)
 	err := s.createIfNotExist(path)
 	if err != nil {
 		return nil, err
 	}
-	return &db{seq: seq, name: name, state: st, dir: s.dir}, nil
+	return &db{seq: seq, name: name, state: st, dir: s.conf.Dir}, nil
 }
 
 func (s *Storage) newLog(name string) (*log, error) {
-	path := fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, name)
+	path := fmt.Sprintf("%s%c%s", s.conf.Dir, os.PathSeparator, name)
 	err := s.createIfNotExist(path)
 	if err != nil {
 		return nil, err
@@ -226,6 +261,7 @@ func (s *Storage) newLog(name string) (*log, error) {
 }
 
 func (s *Storage) startDaemon(e *Engine) {
+	// Refresh db
 	go func() {
 		interval := s.conf.DB.FlushInterval
 		if interval < 60 {
@@ -252,6 +288,15 @@ func (s *Storage) startDaemon(e *Engine) {
 				if err != nil {
 					xlog.Fatalln(err)
 				}
+			}
+		}
+	}()
+
+	// Clean db engine
+	go func() {
+		for _, d := range s.dbs {
+			if d.state == S && d.e != nil && time.Now().Before(d.t.Add(5*time.Second)) {
+				d.e = nil
 			}
 		}
 	}()
@@ -282,11 +327,15 @@ func (s *Storage) loadDB(e *Engine) error {
 		return ActiveDBNotExistError
 	}
 	err := active.open()
+	defer active.close()
 	if err != nil {
 		return err
 	}
-	defer active.close()
-	return e.UnMarshal(active.file)
+	err = e.UnMarshal(active.file)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) loadLog(e *Engine) error {
@@ -311,10 +360,10 @@ func (s *Storage) refresh(e *Engine) error {
 		return ActiveDBNotExistError
 	}
 	err := active.open()
+	defer active.close()
 	if err != nil {
 		return err
 	}
-	defer active.close()
 	return active.write(e.Marshal())
 }
 
@@ -342,19 +391,11 @@ func (s *Storage) foreach(fn func(e *Engine) (interface{}, bool)) (interface{}, 
 	for i := s.dbs.Len() - 1; i >= 0; i-- {
 		d := s.dbs[i]
 		if d.state == S {
-			virtualEngine := &Engine{
-				string: hashmap.New(),
-			}
-			err := d.open()
+			e, err := d.engine()
 			if err != nil {
 				xlog.Fatalln(err)
 			}
-			err = virtualEngine.UnMarshal(d.file)
-			if err != nil {
-				xlog.Fatalln(err)
-			}
-			d.close()
-			v, ok := fn(virtualEngine)
+			v, ok := fn(e)
 			if ok {
 				return v, true
 			}

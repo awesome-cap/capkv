@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/awesome-cap/dkv/config"
-	"github.com/awesome-cap/dkv/ptl"
+	"github.com/awesome-cap/capkv/config"
+	"github.com/awesome-cap/capkv/ptl"
 	"github.com/awesome-cap/hashmap"
 	"io"
 	"strings"
@@ -31,8 +31,14 @@ func New(conf config.Config) (*Engine, error) {
 		string:   hashmap.New(),
 	}
 	e.Registry(Get, Set, Del)
-	_ = s.loadDB(e)
-	_ = s.loadLog(e)
+	err = s.loadDB(e)
+	if err != nil {
+		return nil, err
+	}
+	err = s.loadLog(e)
+	if err != nil {
+		return nil, err
+	}
 	s.startDaemon(e)
 	return e, nil
 }
@@ -107,7 +113,6 @@ func (e *Engine) Marshal() []byte {
 		_ = ptl.WriteUint64(stringBuf, uint64(len(value)))
 		stringBuf.WriteString(value)
 	})
-
 	_ = ptl.WriteUint64(buf, e.lsn)
 	_ = ptl.WriteUint16(buf, 6)
 	buf.WriteString("string")
@@ -118,7 +123,6 @@ func (e *Engine) Marshal() []byte {
 
 func (e *Engine) UnMarshal(reader io.Reader) error {
 	lsn, err := ptl.ReadUint64(reader)
-
 	if err != nil {
 		return err
 	}
