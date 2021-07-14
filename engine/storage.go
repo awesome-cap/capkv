@@ -56,17 +56,16 @@ type db struct {
 	seq   int64
 	dir   string
 	state state
-	seed  os.FileInfo
+	name  string
 
 	file *os.File
 }
 
 func (d *db) size() (int64, error) {
-	seed, err := os.Stat(d.dir + string(os.PathSeparator) + d.seed.Name())
+	seed, err := os.Stat(d.dir + string(os.PathSeparator) + d.name)
 	if err != nil {
 		return 0, err
 	}
-	d.seed = seed
 	return seed.Size(), nil
 }
 
@@ -80,7 +79,7 @@ func (d *db) open() error {
 }
 
 func (d *db) path() string {
-	return d.dir + string(os.PathSeparator) + d.seed.Name()
+	return d.dir + string(os.PathSeparator) + d.name
 }
 
 func (d *db) close() {
@@ -184,21 +183,43 @@ func (s *Storage) active() *db {
 	return s.dbs.active()
 }
 
-func (s *Storage) newDB(st state, seq int64) (*db, error) {
-	dbFile, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, fmt.Sprintf(dbFileNameFormatter, st, seq)))
-	if err != nil && !os.IsExist(err) {
-		return nil, err
+func (s *Storage) createIfNotExist(path string) error {
+	file, err := os.OpenFile(path, os.O_RDONLY, os.FileMode(0766))
+	defer func() {
+		if file != nil {
+			_ = file.Close()
+		}
+	}()
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		file, err = os.Create(path)
+		if err != nil {
+			return err
+		}
 	}
-	seed, err := dbFile.Stat()
+	return nil
+}
+
+func (s *Storage) newDB(st state, seq int64) (*db, error) {
+	name := fmt.Sprintf(dbFileNameFormatter, st, seq)
+	path := fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, name)
+	err := s.createIfNotExist(path)
 	if err != nil {
 		return nil, err
 	}
-	return &db{seq: seq, seed: seed, state: st, dir: s.dir}, nil
+	return &db{seq: seq, name: name, state: st, dir: s.dir}, nil
 }
 
 func (s *Storage) newLog(name string) (*log, error) {
-	file, err := os.Create(fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, name))
-	if err != nil && !os.IsExist(err) {
+	path := fmt.Sprintf("%s%c%s", s.dir, os.PathSeparator, name)
+	err := s.createIfNotExist(path)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_SYNC, os.FileMode(0766))
+	if err != nil {
 		return nil, err
 	}
 	return &log{file: file}, nil

@@ -25,9 +25,6 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	e.Registry(engine.Get)
-	e.Registry(engine.Set)
-	e.Registry(engine.Del)
 
 	tcpServer := net.NewTcp(":8888")
 	err = tcpServer.Serve(func(args []string) ([]string, error) {

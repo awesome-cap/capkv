@@ -30,14 +30,17 @@ func New(conf config.Config) (*Engine, error) {
 		handlers: map[string]handler{},
 		string:   hashmap.New(),
 	}
+	e.Registry(Get, Set, Del)
 	_ = s.loadDB(e)
 	_ = s.loadLog(e)
-	//s.startDaemon(e)
+	s.startDaemon(e)
 	return e, nil
 }
 
-func (e *Engine) Registry(h handler) {
-	e.handlers[strings.ToLower(h.name())] = h
+func (e *Engine) Registry(handlers ...handler) {
+	for _, h := range handlers {
+		e.handlers[strings.ToLower(h.name())] = h
+	}
 }
 
 func (e *Engine) Exec(args []string) ([]string, error) {
