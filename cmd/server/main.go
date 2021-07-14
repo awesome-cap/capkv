@@ -14,13 +14,13 @@ func main() {
 		var err error
 		conf, err = config.Parse(os.Args[1])
 		if err != nil {
-			log.Fatalln(err)
+			log.Panicln(err)
 		}
 	}
 
 	e, err := engine.New(conf)
 	if err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
 
 	tcpServer := net.NewTcp(":8888")
@@ -28,6 +28,6 @@ func main() {
 		return e.Exec(args)
 	})
 	if err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
 }

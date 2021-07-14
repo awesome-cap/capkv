@@ -277,16 +277,16 @@ func (s *Storage) startDaemon(e *Engine) {
 
 			err := s.refresh(e)
 			if err != nil {
-				xlog.Fatalln(err)
+				xlog.Panicln(err)
 			}
 			size, err := s.active().size()
 			if err != nil {
-				xlog.Fatalln(err)
+				xlog.Panicln(err)
 			}
 			if size >= filingSize {
 				err = s.filing()
 				if err != nil {
-					xlog.Fatalln(err)
+					xlog.Panicln(err)
 				}
 			}
 		}
@@ -393,7 +393,7 @@ func (s *Storage) foreach(fn func(e *Engine) (interface{}, bool)) (interface{}, 
 		if d.state == S {
 			e, err := d.engine()
 			if err != nil {
-				xlog.Fatalln(err)
+				xlog.Panicln(err)
 			}
 			v, ok := fn(e)
 			if ok {
