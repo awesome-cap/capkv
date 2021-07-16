@@ -35,7 +35,7 @@ func (h getHandler) handle(e *Engine, args []string) ([]string, error) {
 	if v, ok := e.Get(args[1]); ok {
 		return []string{v}, nil
 	}
-	return nil, errors.New(fmt.Sprintf("%s not exist. ", args[1]))
+	return []string{""}, nil
 }
 
 func (h getHandler) size() int    { return 2 }

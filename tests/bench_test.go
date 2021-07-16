@@ -47,3 +47,14 @@ func BenchmarkSet(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkGet(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		is := strconv.Itoa(i)
+		_, err := connect.Cmd("get", is)
+		if err != nil {
+			b.Fatal(err, i)
+		}
+	}
+}
