@@ -2,7 +2,7 @@ package client
 
 import (
 	"errors"
-	netx "github.com/awesome-cap/capkv/net"
+	netx "github.com/awesome-cap/kv/net"
 	"log"
 	"net"
 )

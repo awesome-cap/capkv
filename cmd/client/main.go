@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"github.com/awesome-cap/capkv/client"
+	"github.com/awesome-cap/kv/client"
 	"log"
 	"os"
 	"strings"

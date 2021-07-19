@@ -1,2 +1,2 @@
-# dkv
+# kv
 distributed kv.

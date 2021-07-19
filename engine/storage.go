@@ -3,8 +3,8 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"github.com/awesome-cap/capkv/config"
-	"github.com/awesome-cap/capkv/ptl"
+	"github.com/awesome-cap/kv/config"
+	"github.com/awesome-cap/kv/ptl"
 	"github.com/awesome-cap/hashmap"
 	"io"
 	"io/ioutil"

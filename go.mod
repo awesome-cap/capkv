@@ -1,4 +1,4 @@
-module github.com/awesome-cap/capkv
+module github.com/awesome-cap/kv
 
 go 1.15
 

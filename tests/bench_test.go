@@ -1,10 +1,10 @@
 package tests
 
 import (
-	"github.com/awesome-cap/capkv/client"
-	"github.com/awesome-cap/capkv/config"
-	"github.com/awesome-cap/capkv/engine"
-	"github.com/awesome-cap/capkv/net"
+	"github.com/awesome-cap/kv/client"
+	"github.com/awesome-cap/kv/config"
+	"github.com/awesome-cap/kv/engine"
+	"github.com/awesome-cap/kv/net"
 	"log"
 	"strconv"
 	"testing"
